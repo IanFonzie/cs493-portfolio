@@ -6,6 +6,7 @@ exports.datastore = new Datastore();
 /* Kinds */
 exports.BOATS = 'Boats';
 exports.LOADS = 'Loads';
+exports.USERS = 'Users';
 
 /* Helpers */
 exports.findEntity = async function findEntity(kind, id) {

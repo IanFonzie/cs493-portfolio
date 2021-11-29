@@ -11,6 +11,7 @@ const Auth0Strategy = require('passport-auth0');
 const boatsRouter = require('./routes/boats');	
 const loadsRouter = require('./routes/loads');
 const authRouter = require('./routes/auth');
+const usersRouter = require('./routes/users');
 
 dotenv.config();
 
@@ -85,24 +86,7 @@ app.use((req, res, next) => {
 app.use('/boats', boatsRouter);
 app.use('/loads', loadsRouter);
 app.use('/auth', authRouter);
-app.use('/', boatsRouter);
-
-/* Render user info. */
-app.get('/user', (req, res, next) => {
-  // Assert user is authenticated.
-  if (req.user) {
-    return next();
-  }
-
-  // Redirect unauthenticated users.
-  req.session.returnTo = req.originalUrl;
-  res.redirect('/auth/login');
-}, (req, res, next) => {
-  res.status(200).render('info', {
-    jwt: req.session.idToken,
-    userId: req.user.id
-  });
-});
+app.use('/', usersRouter);
 
 // Handle 4xx errors.
 app.use((req, res, next) => {
