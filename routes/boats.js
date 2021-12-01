@@ -1,5 +1,5 @@
-const {datastore, Datastore, BOATS, LOADS, findEntity, pagedQuery} = require('../datastore');
-const {handleClientError, handleServerError, loadRepr} = require('../utils');
+const {datastore, Datastore, BOATS, LOADS, USERS, findEntity, pagedQuery} = require('../datastore');
+const {handleClientError, handleServerError, loadRepr, checkJwt} = require('../utils');
 
 const express = require('express');
 const router = express.Router();
@@ -34,6 +34,25 @@ function boatRepr(id, boat, baseUrl, singleton = true) {
   return representation;
 }
 
+async function checkRegistered(req, res, next) {
+  let user;
+
+  try {
+    user = await findEntity(USERS, req.user.sub);
+  } catch (err) {
+    handleServerError(res, next, err);
+    return;
+  }
+
+  
+  if (!user) {
+    handleClientError(res, 403, 'The associated user is not registered.', next);
+    return;
+  }
+  
+  next();
+}
+
 const BAD_REQUEST = 'The request object is missing at least one of the required attributes';
 const BOAT_NOT_FOUND = 'No boat with this boat_id exists';
 const BOAT_OR_LOAD_NOT_FOUND = 'The specified boat and/or load does not exist';
@@ -41,7 +60,7 @@ const LOAD_ALREADY_ASSIGNED = 'The load is already assigned';
 const LOAD_ELSEWHERE = 'The load is not on this boat';
 
 /* Create a boat. */
-router.post('/', async (req, res, next) => {
+router.post('/', checkJwt, checkRegistered, async (req, res, next) => {
   // Validate request.
   const boat = getBoatProps(req);
   if (isBadRequest(boat)) {
@@ -68,7 +87,7 @@ router.post('/', async (req, res, next) => {
 });
 
 /* View a boat. */
-router.get('/:boat_id', async (req, res, next) => {
+router.get('/:boat_id', checkJwt, checkRegistered, async (req, res, next) => {
   let boat;
 
   const id = parseInt(req.params.boat_id, 10);
@@ -192,7 +211,7 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
 });
 
 /* Delete a boat. */
-router.delete('/:boat_id', async (req, res, next) => {
+router.delete('/:boat_id', checkJwt, checkRegistered, async (req, res, next) => {
   let boat;
   let loads;
 
@@ -242,7 +261,7 @@ router.delete('/:boat_id', async (req, res, next) => {
 });
 
 /* View all loads for a given boat. */
-router.get('/:boat_id/loads', async (req, res, next) => {
+router.get('/:boat_id/loads', checkJwt, checkRegistered, async (req, res, next) => {
   let boat;
   let loads;
   let respBody;
@@ -287,7 +306,7 @@ router.get('/:boat_id/loads', async (req, res, next) => {
 });
 
 /* View all boats. */
-router.get('/', async (req, res, next) => {
+router.get('/', checkJwt, checkRegistered, async (req, res, next) => {
   let boats;
   let info;
 
