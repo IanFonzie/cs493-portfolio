@@ -88,11 +88,9 @@ app.use('/loads', loadsRouter);
 app.use('/auth', authRouter);
 app.use('/', usersRouter);
 
-// Handle 4xx errors.
+// Handle 404 errors.
 app.use((req, res, next) => {
-  if (!res.locals.errorMsg) {
-    res.status(404).locals.errorMsg = 'Resource not found.';
-  }
+  res.status(404).locals.errorMsg = 'Resource not found.';
   res.set('Content-Type', 'application/json').send({Error: res.locals.errorMsg});
 });
 

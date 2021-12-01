@@ -1,10 +1,18 @@
+const jwt = require('express-jwt');
+const jwksRsa = require('jwks-rsa');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const DOMAIN = process.env.AUTH0_DOMAIN;
+
 function setErrorState(res, statusCode, message) {
   res.status(statusCode).locals.errorMsg = message;
 }
 
 exports.handleClientError = function(res, statusCode, message, next) {
   setErrorState(res, statusCode, message);
-  next();
+  res.set('Content-Type', 'application/json').send({Error: res.locals.errorMsg});
 }
 
 exports.handleServerError = function(res, next, error) {
@@ -33,3 +41,17 @@ exports.loadRepr = function(id, load, baseUrl) {
     self: `${baseUrl}/loads/${id}`
   };
 }
+
+/* JWT validation. */
+exports.checkJwt = jwt({
+  secret: jwksRsa.expressJwtSecret({
+    cache: true,
+    rateLimit: true,
+    jwksRequestsPerMinute: 5,
+    jwksUri: `https://${DOMAIN}/.well-known/jwks.json`
+  }),
+
+  // Validate the audience and the issuer.
+  issuer: `https://${DOMAIN}/`,
+  algorithms: ['RS256']
+});
