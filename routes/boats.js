@@ -29,6 +29,7 @@ function boatRepr(id, boat, baseUrl, singleton = true) {
     representation.loads = boat.loads;
   }
 
+  representation.owner = boat.owner;
   representation.self = `${baseUrl}/boats/${id}`;
 
   return representation;
@@ -68,8 +69,9 @@ router.post('/', checkJwt, checkRegistered, async (req, res, next) => {
     return;
   }
 
-  // Add default loads.
+  // Add default loads and owner.
   boat.loads = [];
+  boat.owner = req.user.sub;
 
   // Create boat.
   const key = datastore.key(BOATS);
@@ -311,7 +313,10 @@ router.get('/', checkJwt, checkRegistered, async (req, res, next) => {
   let info;
 
   // Create query.
-  const query = datastore.createQuery(BOATS);
+  const query = datastore
+    .createQuery(BOATS)
+    .filter('owner', '=', req.user.sub);
+
   try {
     [boats, info] = await pagedQuery(query, 5, req.query.cursor);
   } catch(e) {
