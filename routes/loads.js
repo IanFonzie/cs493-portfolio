@@ -1,5 +1,5 @@
 const {datastore, Datastore, LOADS, BOATS, findEntity, pagedQuery} = require('../datastore');
-const {handleClientError, handleServerError, loadRepr} = require('../utils');
+const {handleClientError, handleServerError, loadRepr, isAcceptable} = require('../utils');
 
 const express = require('express');
 const router = express.Router();
@@ -10,10 +10,11 @@ function isBadRequest(loadBody) {
 }
 
 function getLoadProps(req) {
-  return (({body: {volume, content, creation_date}}) => {
-    return {volume, content, creation_date: new Date(creation_date)};
-  })(req);
+  return (({body: {volume, content, creation_date}}) => ({volume, content, creation_date}))(req);
 }
+
+// Assert request accepts JSON.
+router.use(isAcceptable);
 
 const BAD_REQUEST = 'The request object is missing at least one of the required attributes';
 const NOT_FOUND = 'No load with this load_id exists';
@@ -27,8 +28,9 @@ router.post('/', async (req, res, next) => {
     return;
   }
 
-  // Set carrier to null.
+  // Set carrier to null and store creation date as a Date.
   load.carrier = null;
+  load.creation_date = new Date(load.creation_date);
 
   // Create loa.
   const key = datastore.key(LOADS);
@@ -144,6 +146,95 @@ router.get('/', async (req, res, next) => {
   }
 
   // Return loads.
+  res.status(200).send(respBody);
+});
+
+/* Edit a load. */
+router.put('/:load_id', async (req, res, next) => {
+  // Validate request.
+  const load = getLoadProps(req);
+  if (isBadRequest(load)) {
+    return handleClientError(res, 400, BAD_REQUEST, next);
+  }
+
+  // Find load.
+  const id = parseInt(req.params.load_id, 10);
+  let stored;
+  try {
+    stored = await findEntity(LOADS, id);
+  } catch(e) {
+    if (e.code === 3) {
+      // load_id was non-int.
+      handleClientError(res, 404, NOT_FOUND, next);
+    } else {
+      handleServerError(res, next, e);
+    }
+    return;
+  }
+
+  if (!stored) {
+    return handleClientError(res, 404, NOT_FOUND);
+  }
+
+  // store creation date as a Date.
+  load.creation_date = new Date(load.creation_date);
+
+  const updated = {carrier: stored.carrier, ...load};
+  const key = datastore.key([LOADS, id]);
+  try {
+    await datastore.update({key, data: updated});
+  } catch (err) {
+    // Pass to server error handler.
+    return handleServerError(res, next, e);
+  }
+
+  // Return load representation.
+  const respBody = loadRepr(parseInt(key.id, 10), updated, req.serverName());
+  res.status(200).send(respBody);
+});
+
+/* Edit a load. */
+router.patch('/:load_id', async (req, res, next) => {
+  // Validate request.
+  const load = getLoadProps(req);
+
+  // Find boat.
+  const id = parseInt(req.params.load_id, 10);
+  let stored;
+  try {
+    stored = await findEntity(LOADS, id);
+  } catch(e) {
+    if (e.code === 3) {
+      // boat_id was non-int.
+      handleClientError(res, 404, NOT_FOUND, next);
+    } else {
+      handleServerError(res, next, e);
+    }
+    return;
+  }
+
+  if (!stored) {
+    return handleClientError(res, 404, NOT_FOUND);
+  }
+
+  // Get missing props.
+  for (let prop in load) {
+    if (load[prop] === undefined) {
+      load[prop] = stored[prop];
+    }
+  }
+
+  const updated = {carrier: stored.carrier, ...load};
+  const key = datastore.key([LOADS, id]);
+  try {
+    await datastore.update({key, data: updated});
+  } catch (err) {
+    // Pass to server error handler.
+    return handleServerError(res, next, e);
+  }
+
+  // Return load representation.
+  const respBody = loadRepr(parseInt(key.id, 10), updated, req.serverName());
   res.status(200).send(respBody);
 });
 

@@ -1,5 +1,5 @@
 const {datastore, Datastore, BOATS, LOADS, USERS, findEntity, pagedQuery} = require('../datastore');
-const {handleClientError, handleServerError, loadRepr, checkJwt} = require('../utils');
+const {handleClientError, handleServerError, loadRepr, checkJwt, isAcceptable} = require('../utils');
 
 const express = require('express');
 const router = express.Router();
@@ -35,24 +35,30 @@ function boatRepr(id, boat, baseUrl, singleton = true) {
   return representation;
 }
 
-async function checkRegistered(req, res, next) {
+// Validate JWT.
+router.use(checkJwt);
+
+// Assert user is registered and has permission.
+router.use(async function checkRegistered(req, res, next) {
   let user;
 
+  // Retrieve the user
   try {
     user = await findEntity(USERS, req.user.sub);
   } catch (err) {
-    handleServerError(res, next, err);
-    return;
+    return handleServerError(res, next, err);
   }
 
-  
+  // User not found.
   if (!user) {
-    handleClientError(res, 403, 'The associated user is not registered.', next);
-    return;
+    return handleClientError(res, 403, 'The associated user is not registered.', next);
   }
   
   next();
-}
+});
+
+// Assert request accepts JSON.
+router.use(isAcceptable);
 
 const BAD_REQUEST = 'The request object is missing at least one of the required attributes';
 const BOAT_NOT_FOUND = 'No boat with this boat_id exists';
@@ -61,7 +67,7 @@ const LOAD_ALREADY_ASSIGNED = 'The load is already assigned';
 const LOAD_ELSEWHERE = 'The load is not on this boat';
 
 /* Create a boat. */
-router.post('/', checkJwt, checkRegistered, async (req, res, next) => {
+router.post('/', async (req, res, next) => {
   // Validate request.
   const boat = getBoatProps(req);
   if (isBadRequest(boat)) {
@@ -89,7 +95,7 @@ router.post('/', checkJwt, checkRegistered, async (req, res, next) => {
 });
 
 /* View a boat. */
-router.get('/:boat_id', checkJwt, checkRegistered, async (req, res, next) => {
+router.get('/:boat_id', async (req, res, next) => {
   let boat;
 
   const id = parseInt(req.params.boat_id, 10);
@@ -137,7 +143,7 @@ router.put('/:boat_id/loads/:load_id', (req, res, next) => {
     // Set load's carrier.
     load.carrier = {
       id: boatId,
-      name: boat.name
+      // name: boat.name
     };
 
     // Add load to boat's loads.
@@ -213,7 +219,7 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
 });
 
 /* Delete a boat. */
-router.delete('/:boat_id', checkJwt, checkRegistered, async (req, res, next) => {
+router.delete('/:boat_id', async (req, res, next) => {
   let boat;
   let loads;
 
@@ -263,7 +269,7 @@ router.delete('/:boat_id', checkJwt, checkRegistered, async (req, res, next) => 
 });
 
 /* View all loads for a given boat. */
-router.get('/:boat_id/loads', checkJwt, checkRegistered, async (req, res, next) => {
+router.get('/:boat_id/loads', async (req, res, next) => {
   let boat;
   let loads;
   let respBody;
@@ -308,7 +314,7 @@ router.get('/:boat_id/loads', checkJwt, checkRegistered, async (req, res, next) 
 });
 
 /* View all boats. */
-router.get('/', checkJwt, checkRegistered, async (req, res, next) => {
+router.get('/', async (req, res, next) => {
   let boats;
   let info;
 
@@ -334,6 +340,92 @@ router.get('/', checkJwt, checkRegistered, async (req, res, next) => {
   }
 
   // Return loads.
+  res.status(200).send(respBody);
+});
+
+/* Edit a boat. */
+router.put('/:boat_id', async (req, res, next) => {
+  // Validate request.
+  const boat = getBoatProps(req);
+  if (isBadRequest(boat)) {
+    return handleClientError(res, 400, BAD_REQUEST, next);
+  }
+
+  // Find boat.
+  const id = parseInt(req.params.boat_id, 10);
+  let stored;
+  try {
+    stored = await findEntity(BOATS, id);
+  } catch(e) {
+    if (e.code === 3) {
+      // boat_id was non-int.
+      handleClientError(res, 404, BOAT_NOT_FOUND, next);
+    } else {
+      handleServerError(res, next, e);
+    }
+    return;
+  }
+
+  if (!stored) {
+    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  }
+
+  const updated = {owner: stored.owner, loads: stored.loads, ...boat};
+  const key = datastore.key([BOATS, id]);
+  try {
+    await datastore.update({key, data: updated});
+  } catch (err) {
+    // Pass to server error handler.
+    return handleServerError(res, next, e);
+  }
+
+  // Return boat representation.
+  const respBody = boatRepr(parseInt(key.id, 10), updated, req.serverName());
+  res.status(200).send(respBody);
+});
+
+/* Edit a boat. */
+router.patch('/:boat_id', async (req, res, next) => {
+  // Validate request.
+  const boat = getBoatProps(req);
+
+  // Find boat.
+  const id = parseInt(req.params.boat_id, 10);
+  let stored;
+  try {
+    stored = await findEntity(BOATS, id);
+  } catch(e) {
+    if (e.code === 3) {
+      // boat_id was non-int.
+      handleClientError(res, 404, BOAT_NOT_FOUND, next);
+    } else {
+      handleServerError(res, next, e);
+    }
+    return;
+  }
+
+  if (!stored) {
+    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  }
+
+  // Get missing props.
+  for (let prop in boat) {
+    if (boat[prop] === undefined) {
+      boat[prop] = stored[prop];
+    }
+  }
+
+  const updated = {owner: stored.owner, loads: stored.loads, ...boat};
+  const key = datastore.key([BOATS, id]);
+  try {
+    await datastore.update({key, data: updated});
+  } catch (err) {
+    // Pass to server error handler.
+    return handleServerError(res, next, e);
+  }
+
+  // Return boat representation.
+  const respBody = boatRepr(parseInt(key.id, 10), updated, req.serverName());
   res.status(200).send(respBody);
 });
 
