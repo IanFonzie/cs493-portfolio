@@ -67,6 +67,7 @@ const LOAD_ALREADY_ASSIGNED = 'The load is already assigned';
 const LOAD_ELSEWHERE = 'The load is not on this boat';
 const NOT_REGISTERED = 'The associated user is not registered';
 const NOT_OWNER = 'The associated user does not own the boat with the requested boat_id';
+const METHOD_NOT_ALLOWED = "Method not allowed. See 'Allow' header";
 
 /* Create a boat. */
 router.post('/', async (req, res, next) => {
@@ -401,6 +402,16 @@ router.patch('/:boat_id', async (req, res, next) => {
   // Return boat representation.
   const respBody = boatRepr(parseInt(key.id, 10), updated, req.serverName());
   res.status(200).send(respBody);
+});
+
+router.put('/', (req, res, next) => {
+  res.set('Allow', 'GET, POST');
+  return handleClientError(res, 405, METHOD_NOT_ALLOWED);
+});
+
+router.delete('/', (req, res, next) => {
+  res.set('Allow', 'GET, POST');
+  return handleClientError(res, 405, METHOD_NOT_ALLOWED);
 });
 
 module.exports = router;

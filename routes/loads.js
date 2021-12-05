@@ -18,6 +18,7 @@ router.use(isAcceptable);
 
 const BAD_REQUEST = 'The request object is missing at least one of the required attributes';
 const NOT_FOUND = 'No load with this load_id exists';
+const METHOD_NOT_ALLOWED = "Method not allowed. See 'Allow' header";
 
 /* Create a load. */
 router.post('/', async (req, res, next) => {
@@ -238,6 +239,16 @@ router.patch('/:load_id', async (req, res, next) => {
   // Return load representation.
   const respBody = loadRepr(parseInt(key.id, 10), updated, req.serverName());
   res.status(200).send(respBody);
+});
+
+router.put('/', (req, res, next) => {
+  res.set('Allow', 'GET, POST');
+  return handleClientError(res, 405, METHOD_NOT_ALLOWED);
+});
+
+router.delete('/', (req, res, next) => {
+  res.set('Allow', 'GET, POST');
+  return handleClientError(res, 405, METHOD_NOT_ALLOWED);
 });
 
 module.exports = router;
