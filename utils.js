@@ -59,7 +59,7 @@ exports.checkJwt = jwt({
 // Assert request accepts correct MIME type.
 exports.isAcceptable = function (req, res, next) {
   if (!(req.accepts('application/json'))) {
-    const errorMsg = `Unsupported 'Accept' header: '${req.get('Accept')}'. Must accept 'application/json'.`;
+    const errorMsg = `Unsupported 'Accept' header: '${req.get('Accept')}'. Must accept 'application/json'`;
     return exports.handleClientError(res, 406, errorMsg);
   }
   next();

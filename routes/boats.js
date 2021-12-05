@@ -51,7 +51,7 @@ router.use(async function checkRegistered(req, res, next) {
 
   // User not found.
   if (!user) {
-    return handleClientError(res, 403, 'The associated user is not registered.', next);
+    return handleClientError(res, 403, NOT_REGISTERED);
   }
   
   next();
@@ -65,6 +65,8 @@ const BOAT_NOT_FOUND = 'No boat with this boat_id exists';
 const BOAT_OR_LOAD_NOT_FOUND = 'The specified boat and/or load does not exist';
 const LOAD_ALREADY_ASSIGNED = 'The load is already assigned';
 const LOAD_ELSEWHERE = 'The load is not on this boat';
+const NOT_REGISTERED = 'The associated user is not registered';
+const NOT_OWNER = 'The associated user does not own the boat with the requested boat_id';
 
 /* Create a boat. */
 router.post('/', async (req, res, next) => {
@@ -111,10 +113,11 @@ router.get('/:boat_id', async (req, res, next) => {
     return;
   }
 
-  // Boat with boat_id was not found.
+  // Boat with boat_id was not found or user does not own it.
   if (!boat) {
-    handleClientError(res, 404, BOAT_NOT_FOUND, next);
-    return;
+    return handleClientError(res, 404, BOAT_NOT_FOUND);
+  } else if (boat.owner !== req.user.sub) {
+    return handleClientError(res, 403, NOT_OWNER);
   }
   
   // Return boat.
@@ -132,6 +135,11 @@ router.put('/:boat_id/loads/:load_id', (req, res, next) => {
     if (!(load && boat)) {
       handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
       return;
+    }
+
+    // Assert current user owns the boat.
+    if (boat.owner !== req.user.sub) {
+      return handleClientError(res, 403, NOT_OWNER);
     }
 
     // Load exists but is already assigned.
@@ -181,6 +189,11 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
     if (!(load && boat)) {
       handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
       return;
+    }
+
+    // Assert current user owns the boat.
+    if (boat.owner !== req.user.sub) {
+      return handleClientError(res, 403, NOT_OWNER);
     }
 
     // Load exists but its carrier is not this boat.
@@ -237,10 +250,11 @@ router.delete('/:boat_id', async (req, res, next) => {
     return;
   }
   
-  // Boat did not exist.
+  // Boat did not exist or user does not own it.
   if (!boat) {
-    handleClientError(res, 404, BOAT_NOT_FOUND, next);
-    return;
+    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  } else if (boat.owner !== req.user.sub) {
+    return handleClientError(res, 403, NOT_OWNER);
   }
 
   // Get loads for the boat.
@@ -288,10 +302,11 @@ router.get('/:boat_id/loads', async (req, res, next) => {
     return;
   }
 
-  // Boat did not exist.
+  // Boat did not exist or user does not own it.
   if (!boat) {
-    handleClientError(res, 404, BOAT_NOT_FOUND, next);
-    return;
+    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  } else if (boat.owner !== req.user.sub) {
+    return handleClientError(res, 403, NOT_OWNER);
   }
 
   // Fetch boat's loads.
@@ -300,8 +315,7 @@ router.get('/:boat_id/loads', async (req, res, next) => {
     try {
       [loads] = await datastore.get(toFetch);
     } catch(e) {
-      handleServerError(res, next, e);
-      return;
+      return handleServerError(res, next, e);
     }
 
     respBody = loads.map(load => {
@@ -326,8 +340,7 @@ router.get('/', async (req, res, next) => {
   try {
     [boats, info] = await pagedQuery(query, 5, req.query.cursor);
   } catch(e) {
-    handleServerError(res, next, e);
-    return;
+    return handleServerError(res, next, e);
   }
  
   // Build response body.
@@ -348,7 +361,7 @@ router.put('/:boat_id', async (req, res, next) => {
   // Validate request.
   const boat = getBoatProps(req);
   if (isBadRequest(boat)) {
-    return handleClientError(res, 400, BAD_REQUEST, next);
+    return handleClientError(res, 400, BAD_REQUEST);
   }
 
   // Find boat.
@@ -366,8 +379,11 @@ router.put('/:boat_id', async (req, res, next) => {
     return;
   }
 
+  // Boat did not exist or user does not own it.
   if (!stored) {
     return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  } else if (stored.owner !== req.user.sub) {
+    return handleClientError(res, 403, NOT_OWNER);
   }
 
   const updated = {owner: stored.owner, loads: stored.loads, ...boat};
@@ -404,8 +420,11 @@ router.patch('/:boat_id', async (req, res, next) => {
     return;
   }
 
+  // Boat did not exist or user does not own it.
   if (!stored) {
     return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+  } else if (stored.owner !== req.user.sub) {
+    return handleClientError(res, 403, NOT_OWNER);
   }
 
   // Get missing props.

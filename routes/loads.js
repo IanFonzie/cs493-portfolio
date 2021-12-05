@@ -114,10 +114,12 @@ router.delete('/:load_id', async (req, res, next) => {
     carrier.loads.splice(index, 1);
   }
 
+  const asyncAction = carrier ? datastore.update.bind(datastore) : Promise.resolve.bind(Promise);
+
   // Delete load and update carrier.
   Promise.all([
     datastore.delete(load[Datastore.KEY]),
-    datastore.update(carrier || {})
+    asyncAction(carrier)
   ]).then(_ => res.status(204).send())
     .catch(e => handleServerError(res, next, e));
 });

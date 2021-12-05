@@ -97,7 +97,7 @@ app.use((req, res, next) => {
 // Handle 5xx errors.
 app.use((err, req, res, next) => {
   if (err.name === 'UnauthorizedError') {
-    res.status(401).locals.errorMsg = 'Missing/invalid authorization.';
+    res.status(401).locals.errorMsg = 'Missing/invalid authorization';
   } else {
     console.error(err.stack)
   }
