@@ -282,51 +282,6 @@ router.delete('/:boat_id', async (req, res, next) => {
     .catch(e => handleServerError(res, next, e));
 });
 
-/* View all loads for a given boat. */
-router.get('/:boat_id/loads', async (req, res, next) => {
-  let boat;
-  let loads;
-  let respBody;
-
-  // Find boat.
-  let id = parseInt(req.params.boat_id, 10);
-  try {
-    boat = await findEntity(BOATS, id);
-  } catch(e) {
-    if (e.code === 3) {
-      // boat_id was non-int.
-      handleClientError(res, 404, BOAT_NOT_FOUND, next);
-    } else {
-      handleServerError(res, next, e);
-    }
-    return;
-  }
-
-  // Boat did not exist or user does not own it.
-  if (!boat) {
-    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
-  } else if (boat.owner !== req.user.sub) {
-    return handleClientError(res, 403, NOT_OWNER);
-  }
-
-  // Fetch boat's loads.
-  const toFetch = boat.loads.map(load => datastore.key([LOADS, load.id]));
-  if (toFetch.length > 0) {
-    try {
-      [loads] = await datastore.get(toFetch);
-    } catch(e) {
-      return handleServerError(res, next, e);
-    }
-
-    respBody = loads.map(load => {
-      return loadRepr(parseInt(load[Datastore.KEY].id, 10), load, req.serverName())
-    });
-  }
-
-  // Return loads or an empty array if none exist.
-  res.status(200).send(respBody || []);
-});
-
 /* View all boats. */
 router.get('/', async (req, res, next) => {
   let boats;
