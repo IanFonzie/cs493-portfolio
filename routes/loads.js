@@ -25,8 +25,7 @@ router.post('/', async (req, res, next) => {
   // Validate request.
   const load = getLoadProps(req);
   if (isBadRequest(load)) {
-    handleClientError(res, 400, BAD_REQUEST, next);
-    return;
+    return handleClientError(res, 400, BAD_REQUEST);
   }
 
   // Set carrier to null and store creation date as a Date.
@@ -39,8 +38,7 @@ router.post('/', async (req, res, next) => {
     await datastore.insert({key, data: load});
   } catch (e) {
     // Pass to server error handler.
-    handleServerError(res, next, e);
-    return;
+    return handleServerError(res, next, e);
   }
 
   // Return load representation.
@@ -58,7 +56,7 @@ router.get('/:load_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // load_id was non-int.
-      handleClientError(res, 404, NOT_FOUND, next);
+      handleClientError(res, 404, NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -67,8 +65,7 @@ router.get('/:load_id', async (req, res, next) => {
 
   // Load with load_id was not found.
   if (!load) {
-    handleClientError(res, 404, NOT_FOUND, next);
-    return;
+    return handleClientError(res, 404, NOT_FOUND);
   }
   
   // Return load.
@@ -88,7 +85,7 @@ router.delete('/:load_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // load_id was non-int.
-      handleClientError(res, 404, NOT_FOUND, next);
+      handleClientError(res, 404, NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -97,8 +94,7 @@ router.delete('/:load_id', async (req, res, next) => {
   
   // Load did not exist.
   if (!load) {
-    handleClientError(res, 404, NOT_FOUND, next);
-    return;
+    return handleClientError(res, 404, NOT_FOUND);
   }
 
   // Prepare carrier data.
@@ -106,8 +102,7 @@ router.delete('/:load_id', async (req, res, next) => {
     try {
       carrier = await findEntity(BOATS, load.carrier.id);
     } catch(e) {
-      handleServerError(res, next, e);
-      return;
+      return handleServerError(res, next, e);
     }
 
     // Remove load from boat's loads.
@@ -132,11 +127,13 @@ router.get('/', async (req, res, next) => {
 
   // Create query.
   const query = datastore.createQuery(LOADS);
+  // Queries are mutable; need to create another.
+  const totalQuery = datastore.createQuery(LOADS);
   try {
     [loads, info] = await pagedQuery(query, 5, req.query.cursor);
+    [total] = await datastore.runQuery(totalQuery);
   } catch(e) {
-    handleServerError(res, next, e);
-    return;
+    return handleServerError(res, next, e);
   }
  
   // Build response body.
@@ -147,6 +144,7 @@ router.get('/', async (req, res, next) => {
   if (info.moreResults === Datastore.MORE_RESULTS_AFTER_LIMIT) {
     respBody.next = `${req.serverName()}/loads?cursor=${encodeURIComponent(info.endCursor)}`;
   }
+  respBody.total = total.length;
 
   // Return loads.
   res.status(200).send(respBody);
@@ -157,7 +155,7 @@ router.put('/:load_id', async (req, res, next) => {
   // Validate request.
   const load = getLoadProps(req);
   if (isBadRequest(load)) {
-    return handleClientError(res, 400, BAD_REQUEST, next);
+    return handleClientError(res, 400, BAD_REQUEST);
   }
 
   // Find load.
@@ -168,7 +166,7 @@ router.put('/:load_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // load_id was non-int.
-      handleClientError(res, 404, NOT_FOUND, next);
+      handleClientError(res, 404, NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -209,7 +207,7 @@ router.patch('/:load_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // boat_id was non-int.
-      handleClientError(res, 404, NOT_FOUND, next);
+      handleClientError(res, 404, NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }

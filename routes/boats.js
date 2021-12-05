@@ -1,5 +1,5 @@
 const {datastore, Datastore, BOATS, LOADS, USERS, findEntity, pagedQuery} = require('../datastore');
-const {handleClientError, handleServerError, loadRepr, checkJwt, isAcceptable} = require('../utils');
+const {handleClientError, handleServerError, checkJwt, isAcceptable} = require('../utils');
 
 const express = require('express');
 const router = express.Router();
@@ -74,8 +74,7 @@ router.post('/', async (req, res, next) => {
   // Validate request.
   const boat = getBoatProps(req);
   if (isBadRequest(boat)) {
-    handleClientError(res, 400, BAD_REQUEST, next);
-    return;
+    return handleClientError(res, 400, BAD_REQUEST);
   }
 
   // Add default loads and owner.
@@ -88,8 +87,7 @@ router.post('/', async (req, res, next) => {
     await datastore.insert({key, data: boat});
   } catch (e) {
     // Pass to server error handler.
-    handleServerError(res, next, e);
-    return;
+    return handleServerError(res, next, e);
   }
 
   // Return boat representation.
@@ -107,7 +105,7 @@ router.get('/:boat_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // boat_id was non-int.
-      handleClientError(res, 404, BOAT_NOT_FOUND, next);
+      handleClientError(res, 404, BOAT_NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -134,8 +132,7 @@ router.put('/:boat_id/loads/:load_id', (req, res, next) => {
   Promise.all([findEntity(BOATS, boatId), findEntity(LOADS, loadId)]).then(([boat, load]) => {
     // Either boat or load do not exist.
     if (!(load && boat)) {
-      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
-      return;
+      return handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND);
     }
 
     // Assert current user owns the boat.
@@ -145,8 +142,7 @@ router.put('/:boat_id/loads/:load_id', (req, res, next) => {
 
     // Load exists but is already assigned.
     if (load.carrier) {
-      handleClientError(res, 403, LOAD_ALREADY_ASSIGNED, next);
-      return;
+      return handleClientError(res, 403, LOAD_ALREADY_ASSIGNED);
     }
 
     // Set load's carrier.
@@ -173,7 +169,7 @@ router.put('/:boat_id/loads/:load_id', (req, res, next) => {
   }).catch(e => {
     if (e.code === 3) {
       // boat_id or load_id was non-int.
-      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
+      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -188,8 +184,7 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
   Promise.all([findEntity(BOATS, boatId), findEntity(LOADS, loadId)]).then(([boat, load]) => {
     // Either boat or load do not exist.
     if (!(load && boat)) {
-      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
-      return;
+      return handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND);
     }
 
     // Assert current user owns the boat.
@@ -199,8 +194,7 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
 
     // Load exists but its carrier is not this boat.
     if (!load.carrier || load.carrier.id !== boatId) {
-      handleClientError(res, 403, LOAD_ELSEWHERE, next);
-      return;
+      return handleClientError(res, 403, LOAD_ELSEWHERE);
     }
 
     // Disassociate carrier.
@@ -225,7 +219,7 @@ router.delete('/:boat_id/loads/:load_id', (req, res, next) => {
   }).catch(e => {
     if (e.code === 3) {
       // boat_id or load_id was non-int.
-      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND, next);
+      handleClientError(res, 404, BOAT_OR_LOAD_NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -253,7 +247,7 @@ router.delete('/:boat_id', async (req, res, next) => {
   
   // Boat did not exist or user does not own it.
   if (!boat) {
-    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+    return handleClientError(res, 404, BOAT_NOT_FOUND);
   } else if (boat.owner !== req.user.sub) {
     return handleClientError(res, 403, NOT_OWNER);
   }
@@ -265,8 +259,7 @@ router.delete('/:boat_id', async (req, res, next) => {
     try {
       [loads] = await datastore.get(toNull);
     } catch(e) {
-      handleServerError(res, next, e);
-      return;
+      return handleServerError(res, next, e);
     }
 
     // Prepare to set load's carrier to null.
@@ -287,14 +280,20 @@ router.delete('/:boat_id', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   let boats;
   let info;
+  let total;
 
-  // Create query.
+  // Create queries.
   const query = datastore
+    .createQuery(BOATS)
+    .filter('owner', '=', req.user.sub);
+  // Queries are mutable; need to create another.
+  const totalQuery = datastore
     .createQuery(BOATS)
     .filter('owner', '=', req.user.sub);
 
   try {
     [boats, info] = await pagedQuery(query, 5, req.query.cursor);
+    [total] = await datastore.runQuery(totalQuery);
   } catch(e) {
     return handleServerError(res, next, e);
   }
@@ -307,6 +306,7 @@ router.get('/', async (req, res, next) => {
   if (info.moreResults === Datastore.MORE_RESULTS_AFTER_LIMIT) {
     respBody.next = `${req.serverName()}/boats?cursor=${encodeURIComponent(info.endCursor)}`;
   }
+  respBody.total = total.length;
 
   // Return loads.
   res.status(200).send(respBody);
@@ -328,7 +328,7 @@ router.put('/:boat_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // boat_id was non-int.
-      handleClientError(res, 404, BOAT_NOT_FOUND, next);
+      handleClientError(res, 404, BOAT_NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -337,7 +337,7 @@ router.put('/:boat_id', async (req, res, next) => {
 
   // Boat did not exist or user does not own it.
   if (!stored) {
-    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+    return handleClientError(res, 404, BOAT_NOT_FOUND);
   } else if (stored.owner !== req.user.sub) {
     return handleClientError(res, 403, NOT_OWNER);
   }
@@ -369,7 +369,7 @@ router.patch('/:boat_id', async (req, res, next) => {
   } catch(e) {
     if (e.code === 3) {
       // boat_id was non-int.
-      handleClientError(res, 404, BOAT_NOT_FOUND, next);
+      handleClientError(res, 404, BOAT_NOT_FOUND);
     } else {
       handleServerError(res, next, e);
     }
@@ -378,7 +378,7 @@ router.patch('/:boat_id', async (req, res, next) => {
 
   // Boat did not exist or user does not own it.
   if (!stored) {
-    return handleClientError(res, 404, BOAT_NOT_FOUND, next);
+    return handleClientError(res, 404, BOAT_NOT_FOUND);
   } else if (stored.owner !== req.user.sub) {
     return handleClientError(res, 403, NOT_OWNER);
   }

@@ -55,8 +55,7 @@ router.get('/users', async (req, res, next) => {
     [users] = await datastore.runQuery(query);
   } catch (err) {
     // Pass to server error handler.
-    handleServerError(res, next, err)
-    return;
+    return handleServerError(res, next, err)
   }
   
   const respBody = users.map(user => {
